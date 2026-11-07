@@ -117,4 +117,3 @@ def pick_plan(name: str) -> MyPlan:
     if name not in MY_PLANS:
         raise ValueError(f"I don't know the plan called {name!r}")
     return MY_PLANS[name]
-
