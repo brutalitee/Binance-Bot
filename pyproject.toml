@@ -1,0 +1,33 @@
+[project]
+name = "my-binance-bot"
+version = "0.1.0"
+description = "My small spot trading bot for Binance (BTC/USDT and ETH/USDT, 1h candles)"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-requests",
+]
+
+[tool.ruff]
+line-length = 95
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_unused_ignores = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["."]
