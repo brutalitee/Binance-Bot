@@ -1,0 +1,28 @@
+# --- My secrets: NEVER upload these anywhere ---
+.env
+*.key
+*secret*
+
+# --- Diaries and logs (my business, not the internet's) ---
+bot.log
+*.log
+paper_trading_results.json
+.live_confirmed
+
+# --- Python leftovers ---
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtual environment ---
+venv/
+.venv/
+
+# --- Editors / OS junk ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
