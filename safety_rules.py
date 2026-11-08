@@ -73,10 +73,10 @@ class SafetyRules:
         self.losses_in_a_row += 1
     # Only apply the long pause when we are NOT in backtest mode
         if my_settings.trading_mode != "BACKTEST" and self.losses_in_a_row >= 3:
-        self.pause_until = datetime.now(timezone.utc) + timedelta(
+            self.pause_until = datetime.now(timezone.utc) + timedelta(
             hours=my_settings.loss_streak_pause_hours
         )
-        log.critical("3 losses in a row. Resting for %d hours.",
+            log.critical("3 losses in a row. Resting for %d hours.",
                      my_settings.loss_streak_pause_hours)
 
     def i_won(self) -> None:
