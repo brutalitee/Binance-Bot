@@ -66,14 +66,14 @@ quiet_news_hours_utc: list = []
 trend_line_length: int = 50
 rsi_length: int = 14
 rsi_too_high: float = 70.0
-rsi_too_low: float = 55.0
+rsi_too_low: float = 40.0          # was 55.0 – allow earlier entries
 volume_average_length: int = 20
-take_profit_percent: float = 0.015
-trailing_stop_percent: float = 0.01
-hard_stop_percent: float = 0.01
+take_profit_percent: float = 0.025  # was 0.015 – give winners more room
+trailing_stop_percent: float = 0.012
+hard_stop_percent: float = 0.012    # was 0.01 – slightly wider stop
 
 bollinger_length: int = 20
-bollinger_width: float = 2.0
+bollinger_width: float = 2.2        # was 2.0 – slightly wider bands
 
 # ------------------------------------------------------------------
 # Honest costs
