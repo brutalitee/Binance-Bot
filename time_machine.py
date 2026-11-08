@@ -1,22 +1,8 @@
 """
 time_machine.py
 ---------------
-Replays two years of old candles through the EXACT same plan and safety
-rules the live bot uses, then shows me the report card.
-(Old name: backtester.py)
-
-Report card includes: win rate, profit factor, biggest losing dip, the
-Sharpe score, and an honest "am I fooling myself?" warning.
-
-Gate: only a passing report card lets me move up to paper trading.
-
-FIXED (2026-11-07): the downloader used to walk backwards from today and
-stopped after one page, giving me only ~757 candles (about 1 month) instead
-of 2 years. Now it walks FORWARD from a fixed start point in the past, page
-by page, until it reaches today.
-
-GEO-FIX (2026-11-08): always use data-api.binance.vision for historical data
-because api.binance.com returns HTTP 451 in many countries.
+Replays historical candles through the exact same plan and safety rules.
+Uses data-api.binance.vision to avoid geo-blocking (HTTP 451).
 """
 
 import json
@@ -34,8 +20,6 @@ log = logging.getLogger("bot.time_machine")
 
 
 class ReportCard:
-    """The result of one replay. All the numbers I care about."""
-
     def __init__(self, coin_name: str, **numbers: float) -> None:
         self.coin_name = coin_name
         for key, value in numbers.items():
@@ -48,7 +32,6 @@ class ReportCard:
 
 
 def save_backtest_result(card: ReportCard) -> None:
-    """Save every backtest report card so we can look at history later."""
     history_file = my_settings.backtest_history_file
     history = []
     if history_file.exists():
@@ -84,11 +67,6 @@ def save_backtest_result(card: ReportCard) -> None:
 
 
 def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
-    """
-    Always pull real historical candles from the public market-data endpoint.
-    Testnet has almost no history. api.binance.com is geo-blocked in many places.
-    data-api.binance.vision is the official unrestricted mirror for public data.
-    """
     history: Dict[str, List[dict]] = {}
     one_hour_ms = 3_600_000
     years_of_ms = my_settings.backtest_years * 365 * 24 * one_hour_ms
@@ -100,7 +78,6 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
     try:
         for coin_name in my_settings.my_coins:
             all_candles: List[dict] = []
-            # Anchor in the past: exactly N years ago, in milliseconds.
             fetch_from = int(time_module.time() * 1000) - years_of_ms
 
             while True:
@@ -114,7 +91,7 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
                     },
                 )
                 if not page:
-                    break  # nothing more exists in this range
+                    break
 
                 for one in page:
                     all_candles.append({
@@ -133,19 +110,15 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
                 next_start = newest_open_time + one_hour_ms
 
                 if next_start <= fetch_from:
-                    # Safety net: if the window somehow didn't move, stop to
-                    # avoid looping forever.
                     log.warning("Download for %s stalled; stopping this coin.", coin_name)
                     break
 
                 fetch_from = next_start
                 time_module.sleep(my_settings.wait_between_calls)
 
-                # Reached today? (Last page will naturally be short.)
                 if newest_open_time + one_hour_ms >= time_module.time() * 1000:
                     break
 
-            # De-duplicate and keep strict time order.
             unique: Dict[int, dict] = {c["open_time"]: c for c in all_candles}
             ordered = [unique[k] for k in sorted(unique)]
             history[coin_name] = ordered
@@ -159,10 +132,6 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
 
 def replay_history(coin_name: str, candles: List[dict],
                    starting_money: float) -> ReportCard:
-    """
-    The heart of it: pretend to trade, one candle at a time, using the
-    same MyPlan.should_i_buy and CoinPurchase as the live bot.
-    """
     plan = MyPlan()
     rules = SafetyRules()
     my_money = starting_money
@@ -181,21 +150,18 @@ def replay_history(coin_name: str, candles: List[dict],
         candle = candles[i]
         price_now = candle["close"]
 
-        # New day? Remember how much money I woke up with.
         day_number = candle["open_time"] // 86_400_000
         if day_number != yesterday_marker:
             yesterday_marker = day_number
             money_at_start_of_day = my_money
 
-        # --- first: take care of a purchase I already hold ---
         if open_purchase is not None:
             open_purchase.follow_price_up(price_now)
             reason = open_purchase.should_i_sell(price_now)
             if reason:
                 sell_price = price_now * (1 - my_settings.slippage_percent)
                 price_change = (sell_price - open_purchase.buy_price) / open_purchase.buy_price
-                real_result = price_change - my_settings.fee_percent * 2  # fees both ways
-                # My 1%-risk rule: a full hard-stop exit costs exactly risk_one_percent of my money.
+                real_result = price_change - my_settings.fee_percent * 2
                 money_change = (my_money * my_settings.risk_one_percent
                                 / my_settings.hard_stop_percent) * real_result
                 my_money += money_change
@@ -208,13 +174,12 @@ def replay_history(coin_name: str, candles: List[dict],
                 all_trade_results.append(real_result)
                 open_purchase = None
 
-        # --- then: maybe buy something new ---
         if open_purchase is None:
             try:
                 rules.check_todays_damage(money_at_start_of_day, my_money)
             except RuntimeError:
                 my_money_over_time.append(my_money)
-                continue  # paused today, just watch
+                continue
             if rules.losses_in_a_row >= 3:
                 my_money_over_time.append(my_money)
                 continue
@@ -236,7 +201,6 @@ def replay_history(coin_name: str, candles: List[dict],
 
         my_money_over_time.append(my_money)
 
-    # ---------------- the report card ----------------
     total = len(winning_trades) + len(losing_trades)
     win_rate = len(winning_trades) / total if total else 0.0
     total_won = sum(winning_trades)
@@ -248,7 +212,6 @@ def replay_history(coin_name: str, candles: List[dict],
     else:
         profit_factor = 0.0
 
-    # Biggest losing dip: deepest drop from a money-high to what came after.
     peak = my_money
     biggest_dip = 0.0
     for money_point in my_money_over_time:
@@ -256,13 +219,11 @@ def replay_history(coin_name: str, candles: List[dict],
         dip = (peak - money_point) / peak
         biggest_dip = max(biggest_dip, dip)
 
-    # Sharpe: are my wins smooth and steady, or luck and chaos?
     sharpe = 0.0
     if len(all_trade_results) > 1 and statistics.stdev(all_trade_results) > 0:
         sharpe = (statistics.mean(all_trade_results)
                   / statistics.stdev(all_trade_results)) * (len(all_trade_results) ** 0.5)
 
-    # --- honesty checks ---
     worries: List[str] = []
     if win_rate > my_settings.too_good_win_rate:
         worries.append(
