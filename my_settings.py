@@ -72,20 +72,19 @@ too_crazy_volatility: float = 4.0       # skip trades when prices swing more tha
 quiet_news_hours_utc: list = []         # fill in hours to avoid, e.g. [12, 13, 14]
 
 # ------------------------------------------------------------------
-# My trading plan (see trading_plan.py)
+# My trading plan
 # ------------------------------------------------------------------
-trend_line_length: int = 50             # 50-candle average = the trend
+trend_line_length: int = 40             # was 50 (faster trend)
 rsi_length: int = 14
-rsi_too_high: float = 68.0              # don't buy when everyone already bought
-rsi_too_low: float = 50.0               # don't catch falling knives either
+rsi_too_high: float = 65.0              # was 70 → 68 → now 65
+rsi_too_low: float = 48.0               # was 55 → 50 → now 48
 volume_average_length: int = 20
-take_profit_percent: float = 0.02      # sell +1.5%
-trailing_stop_percent: float = 0.012     # follow price up, sell if it drops 1% from the top
-hard_stop_percent: float = 0.012         # emergency exit at -1%
+take_profit_percent: float = 0.025      # 2.5 %
+trailing_stop_percent: float = 0.015
+hard_stop_percent: float = 0.015        # 1.5 %
 
-# --- Bollinger Bands ---
-bollinger_length: int = 20              # middle line = 20-candle average
-bollinger_width: float = 2.0            # bands sit 2 standard deviations away
+bollinger_length: int = 20
+bollinger_width: float = 2.0
 
 # ------------------------------------------------------------------
 # Honest costs. Fees eat profit, so I must count them.
