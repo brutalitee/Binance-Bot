@@ -29,57 +29,73 @@ class ReportCard:
 
 
 def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
+    """
+    Always pull real historical candles from mainnet public endpoint.
+    Testnet has almost no history, so backtests on Testnet are useless.
+    Public klines do not need any API key.
+    """
     history: Dict[str, List[dict]] = {}
     one_hour_ms = 3_600_000
     years_of_ms = my_settings.backtest_years * 365 * 24 * one_hour_ms
 
-    for coin_name in my_settings.my_coins:
-        all_candles: List[dict] = []
-        fetch_from = int(time_module.time() * 1000) - years_of_ms
+    # Force real Binance history for the time machine
+    real_address = "https://api.binance.com"
+    original_address = exchange.address
+    exchange.address = real_address
 
-        while True:
-            page = exchange.public_call(
-                "GET", "/api/v3/klines",
-                {
-                    "symbol": coin_name,
-                    "interval": my_settings.candle_size,
-                    "limit": 1000,
-                    "startTime": fetch_from,
-                },
-            )
-            if not page:
-                break
+    try:
+        for coin_name in my_settings.my_coins:
+            all_candles: List[dict] = []
+            fetch_from = int(time_module.time() * 1000) - years_of_ms
 
-            for one in page:
-                all_candles.append({
-                    "open_time": one[0],
-                    "open": float(one[1]),
-                    "high": float(one[2]),
-                    "low": float(one[3]),
-                    "close": float(one[4]),
-                    "volume": float(one[5]),
-                })
+            while True:
+                page = exchange.public_call(
+                    "GET", "/api/v3/klines",
+                    {
+                        "symbol": coin_name,
+                        "interval": my_settings.candle_size,
+                        "limit": 1000,
+                        "startTime": fetch_from,
+                    },
+                )
+                if not page:
+                    break
 
-            log.info("    %s: %d candles collected so far...", coin_name, len(all_candles))
+                for one in page:
+                    all_candles.append({
+                        "open_time": one[0],
+                        "open": float(one[1]),
+                        "high": float(one[2]),
+                        "low": float(one[3]),
+                        "close": float(one[4]),
+                        "volume": float(one[5]),
+                    })
 
-            newest_open_time = page[-1][0]
-            next_start = newest_open_time + one_hour_ms
+                log.info("    %s: %d candles collected so far...",
+                         coin_name, len(all_candles))
 
-            if next_start <= fetch_from:
-                log.warning("Download for %s stalled; stopping this coin.", coin_name)
-                break
+                newest_open_time = page[-1][0]
+                next_start = newest_open_time + one_hour_ms
 
-            fetch_from = next_start
-            time_module.sleep(my_settings.wait_between_calls)
+                if next_start <= fetch_from:
+                    log.warning("Download for %s stalled; stopping this coin.", coin_name)
+                    break
 
-            if newest_open_time + one_hour_ms >= time_module.time() * 1000:
-                break
+                fetch_from = next_start
+                time_module.sleep(my_settings.wait_between_calls)
 
-        unique: Dict[int, dict] = {c["open_time"]: c for c in all_candles}
-        ordered = [unique[k] for k in sorted(unique)]
-        history[coin_name] = ordered
-        log.info("Collected %d candles for %s (about %.1f months).",
-                 len(ordered), coin_name, len(ordered) / (24 * 30.4))
+                if newest_open_time + one_hour_ms >= time_module.time() * 1000:
+                    break
+
+            unique: Dict[int, dict] = {c["open_time"]: c for c in all_candles}
+            ordered = [unique[k] for k in sorted(unique)]
+            history[coin_name] = ordered
+            log.info("Collected %d candles for %s (about %.1f months).",
+                     len(ordered), coin_name, len(ordered) / (24 * 30.4))
+    finally:
+        # Always put the original address back
+        exchange.address = original_address
+
     return history
 
 
