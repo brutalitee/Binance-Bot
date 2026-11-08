@@ -42,21 +42,21 @@ class BinanceConnection:
         self.known_orders: Dict[str, set] = {}
         self.last_call_time: float = 0.0
 
-    # When we have no API key we are only doing a backtest → skip network calls
+        # When we have no API key we are only doing a backtest → skip network calls
         if not my_key:
-        # Put minimal hard-coded rules so the rest of the code does not crash
+            # Put minimal hard-coded rules so the rest of the code does not crash
             for symbol in my_settings.my_coins:
                 self.coin_rules[symbol] = {
                     "still_trading": True,
                     "smallest_amount": 0.00001,
                     "step_size": 0.00001,
                     "smallest_value": 5.0,
-            }
-        return
+                }
+            return
 
-    if not is_testnet:
-        self.check_my_key_permissions()
-    self.learn_coin_rules()
+        if not is_testnet:
+            self.check_my_key_permissions()
+        self.learn_coin_rules()
 
     def check_my_key_permissions(self) -> None:
         """Ask Binance what this key is allowed to do. Fail closed."""
@@ -179,7 +179,7 @@ class BinanceConnection:
                     "type": "STOP_LOSS_LIMIT",
                     "quantity": tidy,
                     "stopPrice": round(stop_price, 2),
-                    "price": round(stop_price * 0.995, 2),  # limit a little below
+                    "price": round(stop_price * 0.995, 2),
                     "timeInForce": "GTC",
                 },
             )
