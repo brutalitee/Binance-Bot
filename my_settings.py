@@ -76,12 +76,12 @@ quiet_news_hours_utc: list = []         # fill in hours to avoid, e.g. [12, 13, 
 # ------------------------------------------------------------------
 trend_line_length: int = 50             # 50-candle average = the trend
 rsi_length: int = 14
-rsi_too_high: float = 70.0              # don't buy when everyone already bought
-rsi_too_low: float = 55.0               # don't catch falling knives either
+rsi_too_high: float = 68.0              # don't buy when everyone already bought
+rsi_too_low: float = 50.0               # don't catch falling knives either
 volume_average_length: int = 20
-take_profit_percent: float = 0.015      # sell +1.5%
-trailing_stop_percent: float = 0.01     # follow price up, sell if it drops 1% from the top
-hard_stop_percent: float = 0.01         # emergency exit at -1%
+take_profit_percent: float = 0.02      # sell +1.5%
+trailing_stop_percent: float = 0.012     # follow price up, sell if it drops 1% from the top
+hard_stop_percent: float = 0.012         # emergency exit at -1%
 
 # --- Bollinger Bands ---
 bollinger_length: int = 20              # middle line = 20-candle average
