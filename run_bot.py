@@ -128,7 +128,7 @@ class RobotTrader:
         self.exchange = exchange
         self.mode = mode
         self.my_money = my_money               # paper = fake dollars; live = real
-        self.plan: MyPlan = pick_plan("trend_rsi_volume_bollinger")
+        self.plan: MyPlan = pick_plan("trend_rsi_simple")
         self.rules = SafetyRules()
         self.my_purchases: Dict[str, CoinPurchase] = load_open_positions()
         self.money_at_start_of_day = my_money
