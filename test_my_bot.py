@@ -51,24 +51,30 @@ def make_purchase():
     return CoinPurchase("BTCUSDT", buy_price=100.0, amount_of_coin=0.5)
 
 
-def test_hard_stop_sells_at_one_percent_down():
+def test_hard_stop_sells():
     purchase = make_purchase()
-    reason = purchase.should_i_sell(100.0 * (1 - my_settings.hard_stop_percent) - 0.01)
+    reason = purchase.should_i_sell(
+        100.0 * (1 - my_settings.hard_stop_percent) - 0.01
+    )
     assert "emergency exit" in reason
 
 
-def test_take_profit_sells_at_one_point_five_up():
+def test_take_profit_sells():
     purchase = make_purchase()
-    reason = purchase.should_i_sell(100.0 * (1 + my_settings.take_profit_percent) + 0.01)
+    reason = purchase.should_i_sell(
+        100.0 * (1 + my_settings.take_profit_percent) + 0.01
+    )
     assert "profit" in reason
 
 
 def test_trailing_stop_never_moves_down():
     purchase = make_purchase()
     purchase.follow_price_up(120.0)
-    assert purchase.emergency_exit_price == pytest.approx(120.0 * 0.99)
+    expected = 120.0 * (1 - my_settings.trailing_stop_percent)
+    assert purchase.emergency_exit_price == pytest.approx(expected)
     purchase.follow_price_up(110.0)
-    assert purchase.emergency_exit_price == pytest.approx(120.0 * 0.99)
+    # trailing stop must not move down
+    assert purchase.emergency_exit_price == pytest.approx(expected)
 
 
 def test_how_much_to_buy_uses_one_percent_risk():
