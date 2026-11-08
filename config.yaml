@@ -7,21 +7,21 @@
 my_coins:
   - BTCUSDT
   - ETHUSDT
-candle_size: "4h"
+candle_size: "1h"
 
 # ---------------------- TRADING PLAN (Entry) -------------------
-trend_line_length: 30                # faster trend (was 40)
+trend_line_length: 40
 rsi_length: 14
-rsi_too_low: 45.0                    # much more permissive
-rsi_too_high: 70.0
-volume_average_length: 15            # slightly shorter
-bollinger_length: 20
-bollinger_width: 2.2                 # slightly wider bands
+rsi_too_low: 45.0
+rsi_too_high: 68.0
+volume_average_length: 20          # no longer used, but keep it
+bollinger_length: 20               # no longer used
+bollinger_width: 2.0
 
 # ---------------------- TRADING PLAN (Exit) --------------------
-take_profit_percent: 0.03            # 3%
-trailing_stop_percent: 0.018
-hard_stop_percent: 0.018             # 1.8%
+take_profit_percent: 0.025         # 2.5%
+trailing_stop_percent: 0.015
+hard_stop_percent: 0.015           # 1.5%
 
 # ---------------------- SAFETY RULES ---------------------------
 risk_one_percent: 0.01
@@ -38,12 +38,13 @@ fee_percent: 0.001
 slippage_percent: 0.0005
 
 # ---------------------- BACKTEST & GATES -----------------------
-backtest_years: 3               # ← recommended
+backtest_years: 2
 good_profit_factor: 1.3
 safe_max_drawdown: 0.15
 too_good_win_rate: 0.80
-min_trades_required: 12         # temporary
+min_trades_required: 30
 paper_days_needed: 30
+
 # ---------------------- TECHNICAL ------------------------------
 wait_between_calls: 1.0
 max_retries: 3
