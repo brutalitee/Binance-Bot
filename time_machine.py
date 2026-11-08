@@ -1,12 +1,14 @@
 # time_machine.py
 """
 Replays two years of old candles through the exact same plan and safety rules.
+Also saves every backtest result into backtest_history.json so we can look back later.
 """
 
 import json
 import logging
 import statistics
 import time as time_module
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import my_settings
@@ -17,7 +19,7 @@ log = logging.getLogger("bot.time_machine")
 
 
 class ReportCard:
-    def __init__(self, coin_name: str, **numbers: float) -> None:
+    def __init__(self, coin_name: str, **numbers) -> None:
         self.coin_name = coin_name
         for key, value in numbers.items():
             setattr(self, key, value)
@@ -28,17 +30,53 @@ class ReportCard:
         return out
 
 
+def save_backtest_result(card: ReportCard) -> None:
+    """
+    Save every backtest report card so we can look at history later.
+    This is NOT machine learning – it is just a diary.
+    """
+    history_file = my_settings.backtest_history_file
+    history = []
+    if history_file.exists():
+        try:
+            with history_file.open("r", encoding="utf-8") as f:
+                history = json.load(f)
+        except Exception:
+            history = []
+
+    entry = {
+        "time": datetime.now(timezone.utc).isoformat(),
+        "coin": card.coin_name,
+        "trades": card.trades_total,
+        "win_rate": round(card.win_rate, 3),
+        "profit_factor": round(card.profit_factor, 3) if card.profit_factor != float("inf") else 999.0,
+        "max_dd": round(card.biggest_loss_dip, 3),
+        "final_money": round(card.money_at_end, 2),
+        "passed": card.passed_the_gate,
+        "settings": {
+            "rsi_low": my_settings.rsi_too_low,
+            "trend": my_settings.trend_line_length,
+            "vol_len": my_settings.volume_average_length,
+            "bb_width": my_settings.bollinger_width,
+            "tp": my_settings.take_profit_percent,
+            "sl": my_settings.hard_stop_percent,
+        },
+    }
+    history.append(entry)
+
+    with history_file.open("w", encoding="utf-8") as f:
+        json.dump(history, f, indent=2)
+
+
 def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
     """
     Always pull real historical candles from mainnet public endpoint.
     Testnet has almost no history, so backtests on Testnet are useless.
-    Public klines do not need any API key.
     """
     history: Dict[str, List[dict]] = {}
     one_hour_ms = 3_600_000
     years_of_ms = my_settings.backtest_years * 365 * 24 * one_hour_ms
 
-    # Force real Binance history for the time machine
     real_address = "https://api.binance.com"
     original_address = exchange.address
     exchange.address = real_address
@@ -93,7 +131,6 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
             log.info("Collected %d candles for %s (about %.1f months).",
                      len(ordered), coin_name, len(ordered) / (24 * 30.4))
     finally:
-        # Always put the original address back
         exchange.address = original_address
 
     return history
@@ -170,6 +207,7 @@ def replay_history(coin_name: str, candles: List[dict],
 
         my_money_over_time.append(my_money)
 
+    # ---------- report card ----------
     total = len(winning_trades) + len(losing_trades)
     win_rate = len(winning_trades) / total if total else 0.0
     total_won = sum(winning_trades)
@@ -223,5 +261,7 @@ def replay_history(coin_name: str, candles: List[dict],
         passed_the_gate=passed,
         worries=" ".join(worries) if worries else "",
     )
+
     log.info("REPORT CARD %s: %s", coin_name, json.dumps(card.as_dict()))
+    save_backtest_result(card)          # <-- saves to backtest_history.json
     return card
