@@ -9,6 +9,12 @@ Report card includes: win rate, profit factor, biggest losing dip, the
 Sharpe score, and an honest "am I fooling myself?" warning.
 
 Gate: only a passing report card lets me move up to paper trading.
+
+FIXED (2026-11-07): the downloader used to walk backwards from today and
+stopped after one page, giving me only ~757 candles (about 1 month) instead
+of 2 years. Now it walks FORWARD from a fixed start point in the past, page
+by page, until it reaches today. Lesson learned: a backtest on 3 trades is
+not a backtest.
 """
 
 import json
@@ -40,21 +46,35 @@ class ReportCard:
 
 def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
     """
-    Walks backwards page by page (1000 candles at a time) until it has
-    BACKTEST_YEARS of history for each of my coins. Sleeps between pages
-    so the exchange never gets annoyed.
+    For each coin:
+      1. Work out the oldest candle time I want (2 years ago).
+      2. Ask for 1000 candles starting there.
+      3. Remember the newest candle received, ask for the NEXT 1000 after it.
+      4. Repeat until I catch up with today.
+    Polite: sleeps one second between pages so the exchange stays friendly.
     """
     history: Dict[str, List[dict]] = {}
-    years_of_milliseconds = my_settings.backtest_years * 365 * 24 * 3600 * 1000
+    one_hour_ms = 3_600_000
+    years_of_ms = my_settings.backtest_years * 365 * 24 * one_hour_ms
 
     for coin_name in my_settings.my_coins:
         all_candles: List[dict] = []
-        older_than: Optional[int] = None
+        # Anchor in the past: exactly two years ago, in milliseconds.
+        fetch_from = int(time_module.time() * 1000) - years_of_ms
 
         while True:
-            page = exchange.get_old_candles_page(coin_name, older_than)
+            page = exchange.public_call(
+                "GET", "/api/v3/klines",
+                {
+                    "symbol": coin_name,
+                    "interval": my_settings.candle_size,
+                    "limit": 1000,
+                    "startTime": fetch_from,
+                },
+            )
             if not page:
-                break
+                break  # nothing more exists in this range
+
             for one in page:
                 all_candles.append({
                     "open_time": one[0],
@@ -64,16 +84,32 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
                     "close": float(one[4]),
                     "volume": float(one[5]),
                 })
-            earliest = page[0][0]
-            if older_than == earliest - 1 or len(page) < 1000:
-                break  # reached the beginning of what we need
-            older_than = earliest - 1
+
+            log.info("    %s: %d candles collected so far...",
+                     coin_name, len(all_candles))
+
+            newest_open_time = page[-1][0]
+            next_start = newest_open_time + one_hour_ms
+
+            if next_start <= fetch_from:
+                # Safety net: if the window somehow didn't move, stop to
+                # avoid looping forever.
+                log.warning("Download for %s stalled; stopping this coin.", coin_name)
+                break
+
+            fetch_from = next_start
             time_module.sleep(my_settings.wait_between_calls)
 
-        all_candles.sort(key=lambda c: c["open_time"])
-        cutoff = all_candles[-1]["open_time"] - years_of_milliseconds
-        history[coin_name] = [c for c in all_candles if c["open_time"] >= cutoff]
-        log.info("Collected %d candles for %s.", len(history[coin_name]), coin_name)
+            # Reached today? (Last page will naturally be short.)
+            if newest_open_time + one_hour_ms >= time_module.time() * 1000:
+                break
+
+        # De-duplicate and keep strict time order.
+        unique: Dict[int, dict] = {c["open_time"]: c for c in all_candles}
+        ordered = [unique[k] for k in sorted(unique)]
+        history[coin_name] = ordered
+        log.info("Collected %d candles for %s (about %.1f months).",
+                 len(ordered), coin_name, len(ordered) / (24 * 30.4))
     return history
 
 
@@ -168,7 +204,7 @@ def replay_history(coin_name: str, candles: List[dict],
     else:
         profit_factor = 0.0
 
-    # Biggest losing dip: the deepest drop from a money-high to what came after.
+    # Biggest losing dip: deepest drop from a money-high to what came after.
     peak = my_money
     biggest_dip = 0.0
     for money_point in my_money_over_time:
