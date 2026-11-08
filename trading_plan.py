@@ -1,15 +1,8 @@
 """
-trading_plan.py
----------------
-Simplified strategy (Option A):
-  BUY only if BOTH conditions are true:
-    1. Trend is UP   (price above its moving average)
-    2. RSI is in a healthy range (not overbought, not too weak)
-
-  SELL when:
-    - Take-profit is hit, or
-    - Trailing stop is hit, or
-    - Hard stop is hit
+trading_plan.py  - TEMPORARY DEBUG VERSION
+------------------------------------------
+Extremely loose entry rules so we can see the maximum possible trade count.
+Use this ONLY for diagnosis, then we will put a real strategy back.
 """
 
 from typing import Optional
@@ -19,8 +12,6 @@ import my_settings
 
 
 class CoinPurchase:
-    """Remembers one open purchase and decides when to sell."""
-
     def __init__(self, coin_name: str, buy_price: float, amount_of_coin: float) -> None:
         self.coin_name = coin_name
         self.buy_price = buy_price
@@ -56,11 +47,7 @@ class CoinPurchase:
 
     @classmethod
     def from_dict(cls, data: dict) -> "CoinPurchase":
-        obj = cls(
-            data["coin_name"],
-            data["buy_price"],
-            data["amount_of_coin"],
-        )
+        obj = cls(data["coin_name"], data["buy_price"], data["amount_of_coin"])
         obj.emergency_exit_price = data.get("emergency_exit_price", obj.emergency_exit_price)
         obj.dream_sell_price = data.get("dream_sell_price", obj.dream_sell_price)
         obj.highest_price_seen = data.get("highest_price_seen", data["buy_price"])
@@ -68,41 +55,37 @@ class CoinPurchase:
 
 
 class MyPlan:
-    """Simplified trend + RSI strategy."""
+    """DEBUG: Very loose entry rules."""
 
-    plan_name = "trend_rsi_simple"
+    plan_name = "debug_loose"
 
     def should_i_buy(self, candles: list) -> str:
         prices = [c["close"] for c in candles]
 
-        need = max(my_settings.trend_line_length, my_settings.rsi_length) + 1
-        if len(prices) < need:
+        # Need only a short history
+        if len(prices) < 30:
             return ""
 
         price_now = prices[-1]
 
-        # Rule 1: Trend is UP
-        the_trend = chart_math.average(prices, my_settings.trend_line_length)
-        if the_trend is None or price_now <= the_trend:
+        # Extremely soft trend filter (20-period SMA)
+        the_trend = chart_math.average(prices, 20)
+        if the_trend is None:
             return ""
 
-        # Rule 2: RSI in healthy range
-        rsi_now = chart_math.rsi_line(prices, my_settings.rsi_length)[-1]
-        if rsi_now is None:
-            return ""
-        if not (my_settings.rsi_too_low < rsi_now < my_settings.rsi_too_high):
-            return ""
+        # Buy if price is even slightly above the short SMA
+        # (or remove this line completely if you want maximum trades)
+        if price_now > the_trend * 0.995:   # almost always true
+            return "BUY"
 
-        return "BUY"
+        return ""
 
 
 MY_PLANS = {
+    "debug_loose": MyPlan(),
     "trend_rsi_simple": MyPlan(),
-    "trend_rsi_volume_bollinger": MyPlan(),  # keep old name as alias so nothing breaks
 }
 
 
 def pick_plan(name: str) -> MyPlan:
-    if name not in MY_PLANS:
-        return MY_PLANS["trend_rsi_simple"]
-    return MY_PLANS[name]
+    return MY_PLANS.get(name, MY_PLANS["debug_loose"])
