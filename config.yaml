@@ -24,25 +24,25 @@ trailing_stop_percent: 0.015
 hard_stop_percent: 0.015            # 1.5%
 
 # ---------------------- SAFETY RULES ---------------------------
-risk_one_percent: 0.01              # risk 1% of capital per trade
+risk_one_percent: 0.01
 max_trades_at_once: 2
-daily_loss_limit: 0.03              # -3% day → pause
+daily_loss_limit: 0.03
 daily_pause_hours: 24
 loss_streak_pause_hours: 8
 too_crazy_volatility: 4.0
 smallest_order_usd: 10.0
-quiet_news_hours_utc: []            # e.g. [13, 14, 15]
+quiet_news_hours_utc: []
 
 # ---------------------- COSTS ----------------------------------
-fee_percent: 0.001                  # 0.1% per side
+fee_percent: 0.001
 slippage_percent: 0.0005
 
 # ---------------------- BACKTEST & GATES -----------------------
 backtest_years: 2
-good_profit_factor: 1.4             # lowered slightly while we increase sample size
+good_profit_factor: 1.4
 safe_max_drawdown: 0.15
 too_good_win_rate: 0.80
-min_trades_required: 30             # honesty check
+min_trades_required: 30
 paper_days_needed: 30
 
 # ---------------------- TECHNICAL ------------------------------
