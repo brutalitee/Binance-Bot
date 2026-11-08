@@ -116,9 +116,9 @@ class MyPlan:
             return ""
 
         # Rule 3: volume shows real interest
-        normal_volume = chart_math.average(volumes, my_settings.volume_average_length)
-        if normal_volume is None or volumes[-1] <= normal_volume:
-            return ""
+       # normal_volume = chart_math.average(volumes, my_settings.volume_average_length)
+       # if normal_volume is None or volumes[-1] <= normal_volume:
+       #     return ""
 
         # Rule 4: price must sit inside the Bollinger Bands.
         bands = chart_math.bollinger_bands(
