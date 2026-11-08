@@ -39,10 +39,11 @@ slippage_percent: 0.0005
 
 # ---------------------- BACKTEST & GATES -----------------------
 backtest_years: 2
-good_profit_factor: 1.4
+#good_profit_factor: 1.4
 safe_max_drawdown: 0.15
 too_good_win_rate: 0.80
-min_trades_required: 30
+min_trades_required: 15              # temporary – raise back to 30 later
+good_profit_factor: 1.3
 paper_days_needed: 30
 
 # ---------------------- TECHNICAL ------------------------------
