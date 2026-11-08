@@ -31,19 +31,32 @@ class SafetyShutdown(Exception):
 
 class BinanceConnection:
     def __init__(self, my_key: str, my_secret: str, address: str, is_testnet: bool) -> None:
-        self.my_key = my_key
-        self.my_secret = my_secret.encode()
-        self.address = address.rstrip("/")
-        self.web = requests.Session()
+    self.my_key = my_key
+    self.my_secret = my_secret.encode() if my_secret else b""
+    self.address = address.rstrip("/")
+    self.web = requests.Session()
+    if my_key:
         self.web.headers.update({"X-MBX-APIKEY": my_key})
 
-        self.coin_rules: Dict[str, dict] = {}
-        self.known_orders: Dict[str, set] = {}
-        self.last_call_time: float = 0.0
+    self.coin_rules: Dict[str, dict] = {}
+    self.known_orders: Dict[str, set] = {}
+    self.last_call_time: float = 0.0
 
-        if not is_testnet:
-            self.check_my_key_permissions()
-        self.learn_coin_rules()
+    # When we have no API key we are only doing a backtest → skip network calls
+    if not my_key:
+        # Put minimal hard-coded rules so the rest of the code does not crash
+        for symbol in my_settings.my_coins:
+            self.coin_rules[symbol] = {
+                "still_trading": True,
+                "smallest_amount": 0.00001,
+                "step_size": 0.00001,
+                "smallest_value": 5.0,
+            }
+        return
+
+    if not is_testnet:
+        self.check_my_key_permissions()
+    self.learn_coin_rules()
 
     def check_my_key_permissions(self) -> None:
         """Ask Binance what this key is allowed to do. Fail closed."""
