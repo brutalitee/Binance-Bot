@@ -20,7 +20,7 @@ log = logging.getLogger("bot.time_machine")
 
 
 class ReportCard:
-    def __init__(self, coin_name: str, **numbers: float) -> None:
+    def __init__(self, coin_name: str, **numbers) -> None:
         self.coin_name = coin_name
         for key, value in numbers.items():
             setattr(self, key, value)
@@ -143,8 +143,16 @@ def replay_history(coin_name: str, candles: List[dict],
     money_at_start_of_day = starting_money
     yesterday_marker: int = -1
 
-    warmup = max(my_settings.trend_line_length, my_settings.volume_average_length,
-                 my_settings.bollinger_length)
+    # Simulate loss-streak pause in candle time (not wall-clock).
+    # After 3 losses we skip this many 1h candles, then resume and reset the streak.
+    pause_until_index: int = -1
+
+    warmup = max(
+        my_settings.trend_line_length,
+        my_settings.volume_average_length,
+        my_settings.bollinger_length,
+        30,  # debug_loose needs at least ~30
+    )
 
     for i in range(warmup, len(candles)):
         candle = candles[i]
@@ -155,6 +163,7 @@ def replay_history(coin_name: str, candles: List[dict],
             yesterday_marker = day_number
             money_at_start_of_day = my_money
 
+        # Manage open position
         if open_purchase is not None:
             open_purchase.follow_price_up(price_now)
             reason = open_purchase.should_i_sell(price_now)
@@ -162,8 +171,9 @@ def replay_history(coin_name: str, candles: List[dict],
                 sell_price = price_now * (1 - my_settings.slippage_percent)
                 price_change = (sell_price - open_purchase.buy_price) / open_purchase.buy_price
                 real_result = price_change - my_settings.fee_percent * 2
-                money_change = (my_money * my_settings.risk_one_percent
-                                / my_settings.hard_stop_percent) * real_result
+                money_change = (
+                    my_money * my_settings.risk_one_percent / my_settings.hard_stop_percent
+                ) * real_result
                 my_money += money_change
                 if real_result > 0:
                     winning_trades.append(real_result)
@@ -171,24 +181,35 @@ def replay_history(coin_name: str, candles: List[dict],
                 else:
                     losing_trades.append(abs(real_result))
                     rules.i_lost()
+                    # Temporary pause after a 3-loss streak (candle-based, not permanent)
+                    if rules.losses_in_a_row >= 3:
+                        pause_until_index = i + my_settings.loss_streak_pause_hours
+                        rules.losses_in_a_row = 0  # reset so we can trade again after the pause
                 all_trade_results.append(real_result)
                 open_purchase = None
 
+        # Look for a new entry
         if open_purchase is None:
+            # Still inside a simulated loss-streak pause?
+            if i < pause_until_index:
+                my_money_over_time.append(my_money)
+                continue
+
             try:
                 rules.check_todays_damage(money_at_start_of_day, my_money)
             except RuntimeError:
+                # Daily loss limit hit – skip this candle only.
+                # Next calendar day will reset money_at_start_of_day.
                 my_money_over_time.append(my_money)
                 continue
-            if rules.losses_in_a_row >= 3:
-                my_money_over_time.append(my_money)
-                continue
+
             calm_enough, _ = rules.is_the_market_calm_enough(
                 [c["close"] for c in candles[max(0, i - 21): i + 1]]
             )
             if not calm_enough:
                 my_money_over_time.append(my_money)
                 continue
+
             if plan.should_i_buy(candles[: i + 1]) == "BUY":
                 buy_price = price_now * (1 + my_settings.slippage_percent)
                 exit_price = buy_price * (1 - my_settings.hard_stop_percent)
@@ -201,6 +222,7 @@ def replay_history(coin_name: str, candles: List[dict],
 
         my_money_over_time.append(my_money)
 
+    # ---------- report card ----------
     total = len(winning_trades) + len(losing_trades)
     win_rate = len(winning_trades) / total if total else 0.0
     total_won = sum(winning_trades)
@@ -212,17 +234,19 @@ def replay_history(coin_name: str, candles: List[dict],
     else:
         profit_factor = 0.0
 
-    peak = my_money
+    peak = starting_money
     biggest_dip = 0.0
     for money_point in my_money_over_time:
         peak = max(peak, money_point)
-        dip = (peak - money_point) / peak
-        biggest_dip = max(biggest_dip, dip)
+        if peak > 0:
+            dip = (peak - money_point) / peak
+            biggest_dip = max(biggest_dip, dip)
 
     sharpe = 0.0
     if len(all_trade_results) > 1 and statistics.stdev(all_trade_results) > 0:
-        sharpe = (statistics.mean(all_trade_results)
-                  / statistics.stdev(all_trade_results)) * (len(all_trade_results) ** 0.5)
+        sharpe = (
+            statistics.mean(all_trade_results) / statistics.stdev(all_trade_results)
+        ) * (len(all_trade_results) ** 0.5)
 
     worries: List[str] = []
     if win_rate > my_settings.too_good_win_rate:
