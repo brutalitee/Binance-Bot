@@ -63,17 +63,20 @@ quiet_news_hours_utc: list = []
 # ------------------------------------------------------------------
 # My trading plan (loosened for more trades)
 # ------------------------------------------------------------------
-trend_line_length: int = 40
+# ------------------------------------------------------------------
+# My trading plan (balanced version)
+# ------------------------------------------------------------------
+trend_line_length: int = 50
 rsi_length: int = 14
-rsi_too_high: float = 70.0
-rsi_too_low: float = 30.0
-volume_average_length: int = 10
-take_profit_percent: float = 0.025
-trailing_stop_percent: float = 0.012
-hard_stop_percent: float = 0.012
+rsi_too_high: float = 65.0          # tighter overbought
+rsi_too_low: float = 45.0           # not too early
+volume_average_length: int = 20
+take_profit_percent: float = 0.03   # 3 %
+trailing_stop_percent: float = 0.015
+hard_stop_percent: float = 0.015    # 1.5 %
 
 bollinger_length: int = 20
-bollinger_width: float = 2.5
+bollinger_width: float = 2.0
 
 # ------------------------------------------------------------------
 # Honest costs
