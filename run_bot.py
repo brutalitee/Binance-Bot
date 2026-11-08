@@ -1,16 +1,9 @@
+# run_bot.py
 """
-run_bot.py
-----------
-The on/off switch of the whole operation. (Old name: main.py)
-
-What it does:
-  BACKTEST -> replay history, write the report card, decide if PAPER is earned
-  PAPER    -> live prices, fake money, keeps a diary of winning days
-  LIVE     -> real money, BLOCKED unless the diary proves 30 winning days
-              AND the backtest passed AND I typed LIVE_CONFIRMED=YES
-
-Nothing in here touches my secret keys directly; that only happens inside
-talk_to_binance.py.
+The on/off switch.
+BACKTEST -> replay history
+PAPER    -> live prices, fake money
+LIVE     -> real money only after gates pass
 """
 
 import json
@@ -29,10 +22,6 @@ from time_machine import download_two_years_of_candles, replay_history
 from trading_plan import CoinPurchase, MyPlan, pick_plan
 
 
-# ----------------------------------------------------------------------
-# Logging: everything the bot does gets written to bot.log AND shown to me.
-# If a secret ever sneaks into a log line, the filter blacks it out.
-# ----------------------------------------------------------------------
 class HideSecrets(logging.Filter):
     def __init__(self) -> None:
         super().__init__()
@@ -62,9 +51,6 @@ def set_up_logging() -> None:
     )
 
 
-# ----------------------------------------------------------------------
-# The paper-trading diary: proof that I deserve real money (or don't)
-# ----------------------------------------------------------------------
 def read_diary() -> dict:
     if my_settings.paper_results_file.exists():
         with my_settings.paper_results_file.open("r", encoding="utf-8") as fh:
@@ -78,9 +64,20 @@ def write_diary(diary: dict) -> None:
         json.dump(diary, fh, indent=2)
 
 
-# ----------------------------------------------------------------------
-# The last door before real money
-# ----------------------------------------------------------------------
+def save_open_positions(purchases: Dict[str, CoinPurchase]) -> None:
+    data = {k: v.to_dict() for k, v in purchases.items()}
+    with my_settings.open_positions_file.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+
+
+def load_open_positions() -> Dict[str, CoinPurchase]:
+    if not my_settings.open_positions_file.exists():
+        return {}
+    with my_settings.open_positions_file.open("r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    return {k: CoinPurchase.from_dict(v) for k, v in data.items()}
+
+
 def check_if_real_money_is_allowed(diary: dict) -> None:
     reasons_to_stop = []
     if not diary.get("backtest_passed"):
@@ -91,7 +88,7 @@ def check_if_real_money_is_allowed(diary: dict) -> None:
             f"but I need {my_settings.paper_days_needed}"
         )
     if my_settings.use_testnet:
-        reasons_to_stop.append("I'm still pointing at the practice server (USE_TESTNET)")
+        reasons_to_stop.append("I am still pointing at the practice server (USE_TESTNET)")
     if os.getenv("LIVE_CONFIRMED", "").strip().upper() != "YES":
         reasons_to_stop.append("LIVE_CONFIRMED is not set to YES in .env")
 
@@ -105,20 +102,21 @@ def check_if_real_money_is_allowed(diary: dict) -> None:
     )
 
 
-# ----------------------------------------------------------------------
-# The engine: buys, sells, remembers, obeys the safety rules
-# ----------------------------------------------------------------------
 class RobotTrader:
     def __init__(self, exchange: Optional[BinanceConnection], mode: str,
                  my_money: float) -> None:
         self.exchange = exchange
         self.mode = mode
-        self.my_money = my_money               # paper = fake dollars; live = real
+        self.my_money = my_money
         self.plan: MyPlan = pick_plan("trend_rsi_volume_bollinger")
         self.rules = SafetyRules()
-        self.my_purchases: Dict[str, CoinPurchase] = {}
+        self.my_purchases: Dict[str, CoinPurchase] = load_open_positions()
         self.money_at_start_of_day = my_money
         self.today_marker: int = -1
+        if self.my_purchases:
+            logging.getLogger("bot.robot").info(
+                "Loaded %d open position(s) from disk.", len(self.my_purchases)
+            )
 
     def wake_up_new_day(self) -> None:
         today = datetime.now(timezone.utc).toordinal()
@@ -127,7 +125,6 @@ class RobotTrader:
             self.money_at_start_of_day = self.my_money
 
     def fake_fill(self, coin_name: str, side: str, amount: float, price: float) -> None:
-        """PAPER mode: pretend the order worked, subtract the fee honestly."""
         fee = amount * price * my_settings.fee_percent
         self.my_money -= fee
         logging.getLogger("bot.robot").info(
@@ -136,7 +133,6 @@ class RobotTrader:
         )
 
     def really_fill(self, coin_name: str, side: str, amount: float, price: float) -> None:
-        """LIVE mode: real order through the guarded connection."""
         assert self.exchange is not None
         self.exchange.place_market_order(coin_name, side, amount, price)
 
@@ -151,16 +147,15 @@ class RobotTrader:
         try:
             self.rules.check_todays_damage(self.money_at_start_of_day, self.my_money)
         except RuntimeError:
-            return  # resting after a rough day
+            return
 
         assert self.exchange is not None
         for coin_name in my_settings.my_coins:
             candles = self.exchange.get_candles(coin_name, how_many=120)
             if len(candles) < 60:
-                continue  # not enough history right now
+                continue
             price_now = candles[-1]["close"]
 
-            # --- look after what I already hold ---
             held = self.my_purchases.get(coin_name)
             if held is not None:
                 held.follow_price_up(price_now)
@@ -183,9 +178,9 @@ class RobotTrader:
                         coin_name, reason, real_result * 100, money_change,
                     )
                     del self.my_purchases[coin_name]
+                    save_open_positions(self.my_purchases)
                 continue
 
-            # --- maybe buy something new ---
             if not self.rules.am_i_allowed_to_trade(self.my_purchases):
                 continue
             now_hour = datetime.now(timezone.utc).hour
@@ -210,16 +205,22 @@ class RobotTrader:
                     )
                     continue
                 self.send_order(coin_name, "BUY", amount, buy_price)
-                self.my_purchases[coin_name] = CoinPurchase(coin_name, buy_price, amount)
+                purchase = CoinPurchase(coin_name, buy_price, amount)
+                # Try to put a stop on the exchange so a crash still protects me
+                if self.mode == "LIVE" and self.exchange is not None:
+                    stop_result = self.exchange.place_stop_loss(
+                        coin_name, amount, exit_price
+                    )
+                    if stop_result:
+                        purchase.stop_order_id = stop_result.get("orderId")
+                self.my_purchases[coin_name] = purchase
+                save_open_positions(self.my_purchases)
                 logging.getLogger("bot.robot").info(
                     "BOUGHT %s amount=%.6f at %.2f, emergency exit at %.2f",
                     coin_name, amount, buy_price, exit_price,
                 )
 
 
-# ----------------------------------------------------------------------
-# Starting point
-# ----------------------------------------------------------------------
 def run_backtest_mode() -> None:
     log = logging.getLogger("bot.runner")
     log.info("Replaying history. No money involved, this is homework.")
@@ -241,7 +242,7 @@ def run_backtest_mode() -> None:
     if everything_passed:
         log.info("Next step: set TRADING_MODE=PAPER in .env and let it run 30 days.")
     else:
-        log.info("The plan didn't prove itself. Rework the plan -- don't paper trade a weak plan.")
+        log.info("The plan did not prove itself. Rework the plan.")
 
 
 def main() -> None:
@@ -267,7 +268,6 @@ def main() -> None:
     if my_settings.trading_mode == "LIVE":
         check_if_real_money_is_allowed(read_diary())
 
-    # PAPER starts with pretend $10,000; LIVE counts my actual US dollars.
     my_money = 10_000.0
     if my_settings.trading_mode == "LIVE":
         account = exchange.signed_call("GET", "/api/v3/account", {})
@@ -282,17 +282,13 @@ def main() -> None:
     today_label = datetime.now(timezone.utc).date().isoformat()
     try:
         while True:
-            # IMPORTANT (bug fix): write yesterday's diary entry BEFORE the
-            # robot wakes up into the new day, because waking up resets the
-            # 'money at start of day' baseline. Recording afterwards would
-            # have measured nonsense.
             if my_settings.trading_mode == "PAPER":
                 today = datetime.now(timezone.utc).date().isoformat()
                 if today != today_label:
                     diary = read_diary()
                     day_result = robot.my_money - robot.money_at_start_of_day
                     daily = diary.setdefault("daily_results", {})
-                    if today not in daily:  # count each day exactly once
+                    if today not in daily:
                         daily[today] = round(day_result, 2)
                         diary["days_recorded"] = diary.get("days_recorded", 0) + 1
                         if day_result > 0:
@@ -303,11 +299,13 @@ def main() -> None:
                     today_label = today
 
             robot.one_round()
-            time.sleep(60)  # one-minute heartbeat; 1h candles don't need faster
+            time.sleep(60)
     except KeyboardInterrupt:
-        log.info("Stopped by hand. Still holding: %s", list(robot.my_purchases.keys()))
-    except SafetyShutdown as danger:
-        log.critical("EMERGENCY SHUTDOWN: %s", danger)
+        log.info("You stopped the bot with Ctrl-C. Open positions saved.")
+        save_open_positions(robot.my_purchases)
+    except SafetyShutdown as e:
+        log.critical("Safety shutdown: %s", e)
+        save_open_positions(robot.my_purchases)
         sys.exit(1)
 
 
