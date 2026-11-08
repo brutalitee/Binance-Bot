@@ -1,3 +1,4 @@
+# .gitignore
 # --- My secrets: NEVER upload these anywhere ---
 .env
 *.key
@@ -7,6 +8,7 @@
 bot.log
 *.log
 paper_trading_results.json
+.open_positions.json
 .live_confirmed
 
 # --- Python leftovers ---
