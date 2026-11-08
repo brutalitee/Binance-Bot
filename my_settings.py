@@ -61,19 +61,19 @@ too_crazy_volatility: float = 4.0
 quiet_news_hours_utc: list = []
 
 # ------------------------------------------------------------------
-# My trading plan  (loosened so we get more trades)
+# My trading plan (loosened for more trades)
 # ------------------------------------------------------------------
-trend_line_length: int = 40            # was 50
+trend_line_length: int = 40
 rsi_length: int = 14
 rsi_too_high: float = 70.0
-rsi_too_low: float = 30.0              # was 35/40 – earlier entries
-volume_average_length: int = 10        # was 15/20 – less strict volume
+rsi_too_low: float = 30.0
+volume_average_length: int = 10
 take_profit_percent: float = 0.025
 trailing_stop_percent: float = 0.012
 hard_stop_percent: float = 0.012
 
 bollinger_length: int = 20
-bollinger_width: float = 2.5           # was 2.2 – wider bands
+bollinger_width: float = 2.5
 
 # ------------------------------------------------------------------
 # Honest costs
@@ -92,7 +92,7 @@ paper_days_needed: int = 30
 results_folder: Path = Path(__file__).parent
 paper_results_file: Path = results_folder / "paper_trading_results.json"
 open_positions_file: Path = results_folder / ".open_positions.json"
-backtest_history_file: Path = results_folder / "backtest_history.json"   # NEW
+backtest_history_file: Path = results_folder / "backtest_history.json"
 
 # ------------------------------------------------------------------
 # Small safety floors for orders
