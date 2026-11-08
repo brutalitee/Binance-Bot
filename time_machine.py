@@ -100,7 +100,7 @@ def download_two_years_of_candles(exchange) -> Dict[str, List[dict]]:
     try:
         for coin_name in my_settings.my_coins:
             all_candles: List[dict] = []
-            # Anchor in the past: exactly two years ago, in milliseconds.
+            # Anchor in the past: exactly N years ago, in milliseconds.
             fetch_from = int(time_module.time() * 1000) - years_of_ms
 
             while True:
@@ -195,7 +195,7 @@ def replay_history(coin_name: str, candles: List[dict],
                 sell_price = price_now * (1 - my_settings.slippage_percent)
                 price_change = (sell_price - open_purchase.buy_price) / open_purchase.buy_price
                 real_result = price_change - my_settings.fee_percent * 2  # fees both ways
-                # My 1%-risk rule: a full -1% emergency exit costs exactly 1% of my money.
+                # My 1%-risk rule: a full hard-stop exit costs exactly risk_one_percent of my money.
                 money_change = (my_money * my_settings.risk_one_percent
                                 / my_settings.hard_stop_percent) * real_result
                 my_money += money_change
@@ -269,8 +269,11 @@ def replay_history(coin_name: str, candles: List[dict],
             f"Winning {win_rate:.0%} of the time looks TOO good "
             f"(over {my_settings.too_good_win_rate:.0%}). I probably tricked myself."
         )
-    if total < 30:
-        worries.append(f"Only {total} trades -- too few to trust.")
+    if total < my_settings.min_trades_required:
+        worries.append(
+            f"Only {total} trades -- too few to trust "
+            f"(need at least {my_settings.min_trades_required})."
+        )
 
     passed = (
         profit_factor > my_settings.good_profit_factor
