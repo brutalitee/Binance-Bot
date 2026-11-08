@@ -186,9 +186,13 @@ def replay_history(coin_name: str, candles: List[dict],
             except RuntimeError:
                 my_money_over_time.append(my_money)
                 continue
-            if rules.losses_in_a_row >= 3:
+
+## Only pause on loss streak when we are NOT doing a backtest
+            if my_settings.trading_mode != "BACKTEST" and rules.losses_in_a_row >= 3:
                 my_money_over_time.append(my_money)
                 continue
+
+
             calm_enough, _ = rules.is_the_market_calm_enough(
                 [c["close"] for c in candles[max(0, i - 21): i + 1]]
             )
