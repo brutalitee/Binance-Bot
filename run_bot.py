@@ -224,7 +224,11 @@ class RobotTrader:
 def run_backtest_mode() -> None:
     log = logging.getLogger("bot.runner")
     log.info("Replaying history. No money involved, this is homework.")
-    exchange = BinanceConnection("", "", my_settings.api_address, is_testnet=True)
+
+    # Force real Binance public data – Testnet is blocked (451) and has almost no history
+    real_address = "https://api.binance.com"
+    exchange = BinanceConnection("", "", real_address, is_testnet=True)
+
     history = download_two_years_of_candles(exchange)
 
     everything_passed = True
@@ -243,8 +247,6 @@ def run_backtest_mode() -> None:
         log.info("Next step: set TRADING_MODE=PAPER in .env and let it run 30 days.")
     else:
         log.info("The plan did not prove itself. Rework the plan.")
-
-
 def main() -> None:
     set_up_logging()
     log = logging.getLogger("bot.runner")
